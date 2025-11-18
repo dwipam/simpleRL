@@ -105,16 +105,19 @@ for episode in range(1000):
         value = value_net(state)
         advantage = G - value.item()
         probs = policy_net(state)
+
+        # Reinforce Objective
+        #log_prob = torch.log(probs[action])
+        #policy_loss = -log_prob * advantage
+
+        # Surrogate Objective
         with torch.no_grad():
             old_probs = old_policy_net(state)
-        log_prob = torch.log(probs[action])
         ratio = probs[action] / old_probs[action]
-        # Reinforce Objective
-        #policy_loss = -log_prob * advantage
-        # Surrogate Objective
         surr1 = ratio * advantage
         surr2 = torch.clamp(ratio, 1 - eps, 1 + eps) * advantage
         policy_loss = -torch.min(surr1, surr2)
+
         policy_losses.append(policy_loss)
         value_losses.append(F.mse_loss(value, torch.tensor([G])))
 
