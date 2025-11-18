@@ -55,7 +55,7 @@ value_net = ValueNet()
 policy_optimizer = optim.Adam(policy_net.parameters(), lr=0.001)
 value_optimizer = optim.Adam(value_net.parameters(), lr=0.001)
 
-def run_episode(max_steps=200):
+def run_episode(max_steps=50):
     row, col = 7, 0  # start bottom-left
     states, actions, rewards, positions = [], [], [], [(row, col)]
     for _ in range(max_steps):
@@ -89,6 +89,9 @@ def print_board(path):
     print()
 
 # ======== Train for several episodes ========
+import copy
+old_policy_net = copy.deepcopy(policy_net)
+eps = 1e-10
 for episode in range(1000):
     states, actions, rewards, positions = run_episode()
     returns = compute_returns(rewards)
@@ -102,9 +105,18 @@ for episode in range(1000):
         value = value_net(state)
         advantage = G - value.item()
         probs = policy_net(state)
+        with torch.no_grad():
+            old_probs = old_policy_net(state)
         log_prob = torch.log(probs[action])
-        policy_losses.append(-log_prob * advantage)
-        value_losses.append(F.mse_loss(value, torch.tensor([[G]])))
+        ratio = probs[action] / old_probs[action]
+        # Reinforce Objective
+        #policy_loss = -log_prob * advantage
+        # Surrogate Objective
+        surr1 = ratio * advantage
+        surr2 = torch.clamp(ratio, 1 - eps, 1 + eps) * advantage
+        policy_loss = -torch.min(surr1, surr2)
+        policy_losses.append(policy_loss)
+        value_losses.append(F.mse_loss(value, torch.tensor([G])))
 
     policy_optimizer.zero_grad()
     torch.stack(policy_losses).sum().backward()
@@ -118,3 +130,5 @@ for episode in range(1000):
         print(f"Episode {episode:3d}: total_reward={sum(rewards):.1f}, steps={len(rewards)}")
         print_board(positions)
         time.sleep(0.5)
+
+    old_policy_net = copy.deepcopy(policy_net)
